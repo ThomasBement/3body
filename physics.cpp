@@ -35,11 +35,7 @@ void a_up(float dt, vector<planet> &planets) {
     }
 }
 
-// CLASSES //
-
-
 // MAIN //
-
 int main() {
     std::vector<planet> planets = {};
 
@@ -49,11 +45,11 @@ int main() {
     planets.push_back(body_1);
     planets.push_back(body_2);
     
-    while (true) {
-        std::cout << planets[0].p << "   " << planets[1].p << std::endl;
+    std::cout << planets[0].p << "   " << planets[1].p << std::endl;
+    for (int i = 0; i < 1e9; i++) {
         a_up(dt, planets);
     }
-    
+    std::cout << planets[0].p << "   " << planets[1].p << std::endl;
     
     return 0;
 }

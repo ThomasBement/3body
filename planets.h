@@ -46,6 +46,7 @@ class planet {
         vec3 a;
         planet(float mm, vec3 pp, vec3 vv) 
             : mass(mm), p(pp), v(vv), a(0.0, 0.0, 0.0) {}
+    
     void p_up(float dt) {
         this->p = this->p.plus(this->v.scale(dt));
     }
