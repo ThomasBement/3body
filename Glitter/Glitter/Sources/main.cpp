@@ -180,11 +180,11 @@ class D {
 
 class vec3 {
   public:
-    float x;
-    float y;
-    float z;
+    double x;
+    double y;
+    double z;
     
-    vec3(float xx, float yy, float zz)
+    vec3(double xx, double yy, double zz)
       : x(xx), y(yy), z(zz) {}
     
     vec3 plus(vec3 v) {
@@ -195,29 +195,30 @@ class vec3 {
         return vec3(x-v.x, y-v.y, z-v.z);
     }
 
-    vec3 scale(float a) {
+    vec3 scale(double a) {
         return vec3(a*x, a*y, a*z);
     }
 
-    float abs() {
+    double abs() {
         return sqrt(x*x + y*y + z*z);
     }
 };
 
 class planet {       
     public:            
-        float mass;
+        double mass;
         vec3 p;
         vec3 v;
         vec3 a;
-        planet(float mm, vec3 pp, vec3 vv) 
-            : mass(mm), p(pp), v(vv), a(0.0, 0.0, 0.0) {}
+        vec3 a0;
+        planet(double mm, vec3 pp, vec3 vv) 
+            : mass(mm), p(pp), v(vv), a(0.0, 0.0, 0.0), a0(0.0, 0.0, 0.0) {}
     
-    void p_up(float dt) {
+    void p_up(double dt) {
         this->p = this->p.plus(this->v.scale(dt));
     }
 
-    void v_up(float dt) {
+    void v_up(double dt) {
         this->v = this->v.plus(this->a.scale(dt));
     }
 };
@@ -333,23 +334,35 @@ class World {
       : vertices(), elements() {}
 };
 
-void phys_up(float dt, float G, vector<planet> &planets) {
+void phys_up(double dt, double G, vector<planet> &planets) {
+    // Position update: Vec3d new_pos = pos + vel * dt + acc * (dt * dt * 0.5);
     for (int i = 0; i < planets.size(); i++) {
+        planets[i].p = planets[i].p.plus(planets[i].v.scale(dt)).plus(planets[i].a.scale(dt * dt * 0.5));
+        //planets[i].p = planets[i].p.plus(planets[i].v.plus(planets[i].a.scale(0.5 * dt)).scale(dt));
+    }
+    // Save previous acceleration
+    for (int i = 0; i < planets.size(); i++) {
+      planets[i].a0 = planets[i].a;
+      planets[i].a = vec3(0.0, 0.0, 0.0);
+    }
+    // Compute acceleration
+    for (int i = 0; i < planets.size(); i++) {
+        planets[i].a0 = planets[i].a;
         for (int j = 0; j < i; j++) {
             vec3 displacement = planets[i].p.sub(planets[j].p);
-            float distance = displacement.abs();
+            double distance = displacement.abs();
             vec3 G_inverse_square_ij = displacement.scale(G / (distance * distance * distance));
-            planets[i].a = G_inverse_square_ij.scale(-planets[j].mass);
-            planets[j].a = G_inverse_square_ij.scale(planets[i].mass);
+            planets[i].a = planets[i].a.plus(G_inverse_square_ij.scale(-planets[j].mass));
+            planets[j].a = planets[j].a.plus(G_inverse_square_ij.scale(planets[i].mass));
         }
     }
+    // Velocity update: Vec3d new_vel = vel + (acc + new_acc) * (dt * 0.5);
     for (int i = 0; i < planets.size(); i++) {
-        planets[i].v_up(dt);
-        planets[i].p_up(dt);
+        planets[i].v = planets[i].v.plus((planets[i].a0.plus(planets[i].a)).scale(dt * 0.5));
     }
 }
 
-float planet_rad(float mass, float dens = 5520) {
+double planet_rad(double mass, double dens = 5520) {
     return cbrt((3 * mass) / (4 * M_PI * dens));
 }
 
@@ -378,19 +391,32 @@ int main() {
     // Create and initialize the drawing object:
     D d;
     fprintf(stderr, "Loaded vertex data. Error code is: %d \n", glGetError());
-    float t = 0.0;
-    const float dt = 5e1;
-    const float G = 6.6743e-11; // [m.m.m/kg.s.s]
-    const float scale = 2e-9;
+    double t = 0.0;
+    const double dt = 1e-4;
+    const int phys_loop = 5e0;
+    const double G = 1; // 6.6743e-11 [m.m.m/kg.s.s]
+    const double scale = 5e-1;
+
+    const double rad_sep = 1;
+    const double v_scale = 5e-1;
+    vector<vec3> p_init = {};
+    vector<vec3> v_init = {};
+    for (int i = 0; i < 3; i++) {
+        double theta = 2 * i * M_PI / 3;
+        p_init.push_back(vec3(rad_sep*cos(theta), rad_sep*sin(theta), 0));
+        v_init.push_back(vec3(v_scale*rad_sep*sin(theta), -v_scale*rad_sep*cos(theta), 0));
+    } 
 
     // Define planet initial conditions and push to vector
     vector<planet> planets = {};
 
-    planet body_1(6e24, vec3(0, 0, 0), vec3(0, 0, 0));
-    planet body_2(7e22, vec3(3.84e8, 0, 0), vec3(0, 1e3, 0));
+    planet sun_1(1, p_init[0], v_init[0]);
+    planet sun_2(1, p_init[1], v_init[1]);
+    planet sun_3(1, p_init[2], v_init[2]);
 
-    planets.push_back(body_1);
-    planets.push_back(body_2);
+    planets.push_back(sun_1);
+    planets.push_back(sun_2);
+    planets.push_back(sun_3);
 
     // Rendering Loop
     while (glfwWindowShouldClose(mWindow) == false) {
@@ -411,7 +437,10 @@ int main() {
         glClearColor(0, 0, 0, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         t += dt;
-        phys_up(dt, G, planets);
+        
+        for (int i = 0; i < phys_loop; i++) {
+            phys_up(dt, G, planets);
+        }
 
         //d.set_matrix(t); View rotation
         
