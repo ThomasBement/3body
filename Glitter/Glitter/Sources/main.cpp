@@ -1,3 +1,6 @@
+// Defines
+#define _USE_MATH_DEFINES
+
 // Local Headers
 #include "glitter.hpp"
 
@@ -9,7 +12,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <math.h>
+#include <cmath>
 
 // Standard Headers
 #include <cstdio>
@@ -24,7 +27,6 @@ using std::vector;
 
 // Images
 #include "stb_image.h"
-
 
 string read_file(const string filename) {
   ifstream f(filename);
@@ -185,12 +187,38 @@ class vec3 {
     vec3(float xx, float yy, float zz)
       : x(xx), y(yy), z(zz) {}
     
-    vec3 p(vec3 v) {
+    vec3 plus(vec3 v) {
         return vec3(x+v.x, y+v.y, z+v.z);
     }
-    
+
+    vec3 sub(vec3 v) {
+        return vec3(x-v.x, y-v.y, z-v.z);
+    }
+
     vec3 scale(float a) {
         return vec3(a*x, a*y, a*z);
+    }
+
+    float abs() {
+        return sqrt(x*x + y*y + z*z);
+    }
+};
+
+class planet {       
+    public:            
+        float mass;
+        vec3 p;
+        vec3 v;
+        vec3 a;
+        planet(float mm, vec3 pp, vec3 vv) 
+            : mass(mm), p(pp), v(vv), a(0.0, 0.0, 0.0) {}
+    
+    void p_up(float dt) {
+        this->p = this->p.plus(this->v.scale(dt));
+    }
+
+    void v_up(float dt) {
+        this->v = this->v.plus(this->a.scale(dt));
     }
 };
 
@@ -220,9 +248,9 @@ class World {
     void add_face(vec3 base, vec3 du, vec3 dv) {
         int vertexLoc = vertices.size();
         vertices.push_back(Vert(base, 3., 0.));
-        vertices.push_back(Vert(base.p(du), 4., 0.));
-        vertices.push_back(Vert(base.p(dv), 3., 1.));
-        vertices.push_back(Vert(base.p(du).p(dv), 4., 1.));
+        vertices.push_back(Vert(base.plus(du), 4., 0.));
+        vertices.push_back(Vert(base.plus(dv), 3., 1.));
+        vertices.push_back(Vert(base.plus(du).plus(dv), 4., 1.));
         elements.push_back(vertexLoc);
         elements.push_back(vertexLoc+1);
         elements.push_back(vertexLoc+2);
@@ -292,10 +320,10 @@ class World {
           float phi1 = 2 * M_PI * (i+1) / (float)N_phi;
           float theta0 = M_PI * (j - N_theta/2) / (float)N_theta;
           float theta1 = M_PI * (j + 1 - N_theta/2) / (float)N_theta;
-          vec3 a = center.p(get_sphere_point(phi0, theta0).scale(r));
-          vec3 b = center.p(get_sphere_point(phi0, theta1).scale(r));
-          vec3 c = center.p(get_sphere_point(phi1, theta0).scale(r));
-          vec3 d = center.p(get_sphere_point(phi1, theta1).scale(r));
+          vec3 a = center.plus(get_sphere_point(phi0, theta0).scale(r));
+          vec3 b = center.plus(get_sphere_point(phi0, theta1).scale(r));
+          vec3 c = center.plus(get_sphere_point(phi1, theta0).scale(r));
+          vec3 d = center.plus(get_sphere_point(phi1, theta1).scale(r));
           add_quad(a, b, c, d);
         }
       }
@@ -304,6 +332,26 @@ class World {
     World()
       : vertices(), elements() {}
 };
+
+void phys_up(float dt, float G, vector<planet> &planets) {
+    for (int i = 0; i < planets.size(); i++) {
+        for (int j = 0; j < i; j++) {
+            vec3 displacement = planets[i].p.sub(planets[j].p);
+            float distance = displacement.abs();
+            vec3 G_inverse_square_ij = displacement.scale(G / (distance * distance * distance));
+            planets[i].a = G_inverse_square_ij.scale(-planets[j].mass);
+            planets[j].a = G_inverse_square_ij.scale(planets[i].mass);
+        }
+    }
+    for (int i = 0; i < planets.size(); i++) {
+        planets[i].v_up(dt);
+        planets[i].p_up(dt);
+    }
+}
+
+float planet_rad(float mass, float dens = 5520) {
+    return cbrt((3 * mass) / (4 * M_PI * dens));
+}
 
 int main() {
 
@@ -327,27 +375,47 @@ int main() {
     gladLoadGL();
     fprintf(stderr, "OpenGL %s\n", glGetString(GL_VERSION));
 
-    // Create the world object
-    World world;
-    //world.add_cubes(1);
-    world.add_sphere(vec3(0, 0, 0), 0.5, 16, 8);
     // Create and initialize the drawing object:
     D d;
-    d.vertexData(world.getVerticesSize(), world.getVertices());
-    d.elementData(world.getElementsSize(), world.getElements());
     fprintf(stderr, "Loaded vertex data. Error code is: %d \n", glGetError());
     float t = 0.0;
-    
+    const float dt = 5e1;
+    const float G = 6.6743e-11; // [m.m.m/kg.s.s]
+    const float scale = 2e-9;
+
+    // Define planet initial conditions and push to vector
+    vector<planet> planets = {};
+
+    planet body_1(6e24, vec3(0, 0, 0), vec3(0, 0, 0));
+    planet body_2(7e22, vec3(3.84e8, 0, 0), vec3(0, 1e3, 0));
+
+    planets.push_back(body_1);
+    planets.push_back(body_2);
+
     // Rendering Loop
     while (glfwWindowShouldClose(mWindow) == false) {
         if (glfwGetKey(mWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(mWindow, true);
+        
+        // Create the first world objects based on planets vector
+        World world; // New frame new world
+        for (int i = 0; i < planets.size(); i++) {
+          world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass), 16, 8);
+        }
+
+        // Get verticies and elements for all objects in world
+        d.vertexData(world.getVerticesSize(), world.getVertices());
+        d.elementData(world.getElementsSize(), world.getElements());
 
         // Background Fill Color
-        glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
+        glClearColor(0, 0, 0, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        t += 0.5;
-        d.set_matrix(t);
+        t += dt;
+        phys_up(dt, G, planets);
+
+        //d.set_matrix(t); View rotation
+        
+        // Shaders and textures to buffer
         glDrawElements(GL_TRIANGLES, world.getElementsCount(), GL_UNSIGNED_INT, 0);
 
         // Flip Buffers and Draw
