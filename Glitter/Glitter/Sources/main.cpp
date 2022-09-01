@@ -24,6 +24,10 @@ using std::cout; using std::endl;
 using std::string;
 #include <vector>
 using std::vector;
+#include <thread>
+using namespace std::this_thread;
+#include <chrono>
+using namespace std::chrono;
 
 // Images
 #include "stb_image.h"
@@ -207,12 +211,13 @@ class vec3 {
 class planet {       
     public:            
         double mass;
+        double scale;
         vec3 p;
         vec3 v;
         vec3 a;
         vec3 a0;
-        planet(double mm, vec3 pp, vec3 vv) 
-            : mass(mm), p(pp), v(vv), a(0.0, 0.0, 0.0), a0(0.0, 0.0, 0.0) {}
+        planet(double mm, vec3 pp, vec3 vv, double ss = 1) 
+            : mass(mm), scale(ss), p(pp), v(vv), a(0.0, 0.0, 0.0), a0(0.0, 0.0, 0.0) {}
     
     void p_up(double dt) {
         this->p = this->p.plus(this->v.scale(dt));
@@ -366,6 +371,40 @@ double planet_rad(double mass, double dens = 5520) {
     return cbrt((3 * mass) / (4 * M_PI * dens));
 }
 
+void lagrange_system(vector<planet> &planets) {
+    const double rad_sep = 1;
+    const double v_scale = 5e-1;
+    
+    vector<vec3> p_init = {};
+    vector<vec3> v_init = {};
+    
+    for (int i = 0; i < 3; i++) {
+        double theta = 2 * i * M_PI / 3;
+        p_init.push_back(vec3(rad_sep * cos(theta), rad_sep * sin(theta), 0));
+        v_init.push_back(vec3(v_scale * rad_sep * sin(theta), -v_scale * rad_sep * cos(theta), 0));
+    }
+
+    planet sun_1(1, p_init[0], v_init[0]);
+    planet sun_2(1, p_init[1], v_init[1]);
+    planet sun_3(1, p_init[2], v_init[2]);
+    planet planet_1(1.0/1000, vec3(5e-1, -5e-1, 2e-1), vec3(0, 5e-1, 0), 5e0);
+
+    planets.push_back(sun_1);
+    planets.push_back(sun_2);
+    planets.push_back(sun_3);
+    planets.push_back(planet_1);
+}
+
+void figure_eight(vector<planet>& planets) {
+    planet sun_1(1, vec3(-0.97000436, 0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+    planet sun_2(1, vec3(0.97000436, -0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+    planet sun_3(1, vec3(0, 0, 0), vec3(-2*0.466203685, -2*0.43236573, 0));
+
+    planets.push_back(sun_1);
+    planets.push_back(sun_2);
+    planets.push_back(sun_3);
+}
+
 int main() {
 
     // Load GLFW and Create a Window
@@ -391,32 +430,21 @@ int main() {
     // Create and initialize the drawing object:
     D d;
     fprintf(stderr, "Loaded vertex data. Error code is: %d \n", glGetError());
+    const double G = 1; // 6.6743e-11 [m.m.m/kg.s.s]
+    const double scale = 6e-1;
+    
+    // Physics time
     double t = 0.0;
     const double dt = 1e-4;
-    const int phys_loop = 5e0;
-    const double G = 1; // 6.6743e-11 [m.m.m/kg.s.s]
-    const double scale = 5e-1;
-
-    const double rad_sep = 1;
-    const double v_scale = 5e-1;
-    vector<vec3> p_init = {};
-    vector<vec3> v_init = {};
-    for (int i = 0; i < 3; i++) {
-        double theta = 2 * i * M_PI / 3;
-        p_init.push_back(vec3(rad_sep*cos(theta), rad_sep*sin(theta), 0));
-        v_init.push_back(vec3(v_scale*rad_sep*sin(theta), -v_scale*rad_sep*cos(theta), 0));
-    } 
+    const int phys_loop = 1e2;
+    
+    // Display time
+    const int FPS = 120;
+    const int nano_delay = 1e9 / FPS;
 
     // Define planet initial conditions and push to vector
     vector<planet> planets = {};
-
-    planet sun_1(1, p_init[0], v_init[0]);
-    planet sun_2(1, p_init[1], v_init[1]);
-    planet sun_3(1, p_init[2], v_init[2]);
-
-    planets.push_back(sun_1);
-    planets.push_back(sun_2);
-    planets.push_back(sun_3);
+    lagrange_system(planets);
 
     // Rendering Loop
     while (glfwWindowShouldClose(mWindow) == false) {
@@ -426,7 +454,7 @@ int main() {
         // Create the first world objects based on planets vector
         World world; // New frame new world
         for (int i = 0; i < planets.size(); i++) {
-          world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass), 16, 8);
+          world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass)*planets[i].scale, 16, 8);
         }
 
         // Get verticies and elements for all objects in world
@@ -450,6 +478,9 @@ int main() {
         // Flip Buffers and Draw
         glfwSwapBuffers(mWindow);
         glfwPollEvents();
+
+        // Apply FPS delay
+        sleep_for(nanoseconds(nano_delay));
     }
     glfwTerminate();
     return EXIT_SUCCESS;
