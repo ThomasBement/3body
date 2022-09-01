@@ -102,7 +102,6 @@ class D {
         fprintf(stderr, "Error: %d channels in image %s, expected 3.\n",
           channels, filename.c_str());
       }
-      fprintf(stderr, "hello world!\n");
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
       stbi_image_free(pixels);
     }
@@ -283,13 +282,13 @@ class World {
     int getElementsCount() {
         return elements.size();
     }
-    int getElementsSize() {
+    size_t getElementsSize() {
         return elements.size() * sizeof(GLuint);
     }
     GLuint *getElements() {
         return elements.data();
     }
-    int getVerticesSize() {
+    size_t getVerticesSize() {
         return vertices.size() * sizeof(Vert);
     }
     Vert *getVertices() {
@@ -297,7 +296,7 @@ class World {
     }
     
     void add_cubes(int n) {
-        float unl = 1.0/n; // unit length
+        double unl = 1.0/n; // unit length
         vec3 dx(unl, 0.0, 0.0);
         vec3 dy(0.0, unl, 0.0);
         vec3 dz(0.0, 0.0, unl);
@@ -315,17 +314,17 @@ class World {
         }
     }
     
-    vec3 get_sphere_point(float phi, float theta) {
+    vec3 get_sphere_point(double phi, double theta) {
       return vec3(cos(phi)*cos(theta), sin(phi)*cos(theta), sin(theta));
     }
     
-    void add_sphere(vec3 center, float r, int N_phi, int N_theta) {
+    void add_sphere(vec3 center, double r, int N_phi, int N_theta) {
       for (int i = 0; i < N_phi; i++) {
         for (int j = 0; j < N_theta; j++) {
-          float phi0 = 2 * M_PI * i / (float)N_phi;
-          float phi1 = 2 * M_PI * (i+1) / (float)N_phi;
-          float theta0 = M_PI * (j - N_theta/2) / (float)N_theta;
-          float theta1 = M_PI * (j + 1 - N_theta/2) / (float)N_theta;
+          double phi0 = 2 * M_PI * i / (double)N_phi;
+          double phi1 = 2 * M_PI * (i+1) / (double)N_phi;
+          double theta0 = M_PI * (j - N_theta/2) / (double)N_theta;
+          double theta1 = M_PI * (j + 1 - N_theta/2) / (double)N_theta;
           vec3 a = center.plus(get_sphere_point(phi0, theta0).scale(r));
           vec3 b = center.plus(get_sphere_point(phi0, theta1).scale(r));
           vec3 c = center.plus(get_sphere_point(phi1, theta0).scale(r));
@@ -405,8 +404,17 @@ void figure_eight(vector<planet>& planets) {
     planets.push_back(sun_3);
 }
 
-int main() {
+void random(vector<planet>& planets) {
+    planet sun_1(1, vec3(-0.97000436, 0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+    planet sun_2(1, vec3(0.97000436, -0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+    planet sun_3(1, vec3(0, 0, 0), vec3(-2 * 0.466203685, -2 * 0.43236573, 0));
 
+    planets.push_back(sun_1);
+    planets.push_back(sun_2);
+    planets.push_back(sun_3);
+}
+
+int main() {
     // Load GLFW and Create a Window
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -430,57 +438,78 @@ int main() {
     // Create and initialize the drawing object:
     D d;
     fprintf(stderr, "Loaded vertex data. Error code is: %d \n", glGetError());
-    const double G = 1; // 6.6743e-11 [m.m.m/kg.s.s]
-    const double scale = 6e-1;
     
-    // Physics time
-    double t = 0.0;
-    const double dt = 1e-4;
-    const int phys_loop = 1e2;
+    // -------------------------------- //
+    // PHYSICS CONSTANTS
+    // -------------------------------- //
+    const double G = 1;                 // Gravitational constant: [m.m.m/kg.s.s] Ours -> 6.6743e-11 
+    const double scale = 6e-1;          // Scale factor for visualization 
     
-    // Display time
-    const int FPS = 120;
-    const int nano_delay = 1e9 / FPS;
+    // -------------------------------- //
+    // TIME CONSTANTS
+    // -------------------------------- //
+    double t = 0.0;                     // Physics: Time in while loop [Units of time step]
+    const double dt = 1e-4;             // Physics: Time step [s?]
+    const int phys_loop = 100;          // Physics: Physics updates per frame [#]
+    const double FPS = 120;             // Render: Frames per seccond [FPS]
+    const double frame_delay = 1/FPS;   // Render: Frame time period [s]
+    glfwSetTime(0.0);                   // Render: Set GLFW timer to zero
+    double t0 = 0.0;                    // Render: Previous frame draw time [s]
+    double t1 = glfwGetTime();          // Render: Current time [s]
 
     // Define planet initial conditions and push to vector
     vector<planet> planets = {};
     lagrange_system(planets);
 
-    // Rendering Loop
+    // -------------------------------- //
+    // WINDOW LOOP
+    // -------------------------------- //
     while (glfwWindowShouldClose(mWindow) == false) {
-        if (glfwGetKey(mWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(mWindow, true);
-        
-        // Create the first world objects based on planets vector
-        World world; // New frame new world
-        for (int i = 0; i < planets.size(); i++) {
-          world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass)*planets[i].scale, 16, 8);
+        // -------------------------------- //
+        // ESCAPE CONDITIONS
+        // -------------------------------- //
+        if (glfwGetKey(mWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+          glfwSetWindowShouldClose(mWindow, true);
         }
-
-        // Get verticies and elements for all objects in world
-        d.vertexData(world.getVerticesSize(), world.getVertices());
-        d.elementData(world.getElementsSize(), world.getElements());
-
-        // Background Fill Color
-        glClearColor(0, 0, 0, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        t += dt;
         
-        for (int i = 0; i < phys_loop; i++) {
-            phys_up(dt, G, planets);
+        // -------------------------------- //
+        // FRAME UPDATE
+        // -------------------------------- //
+        t1 = glfwGetTime();
+        if ((t1 - t0) >= frame_delay) {
+          // -------------------------------- //
+          // PHYSICS UPDATE
+          // -------------------------------- //
+          for (int i = 0; i < phys_loop; i++) {
+              phys_up(dt, G, planets);
+          }
+
+          // Create world object and add all geometry
+          World world;
+          for (int i = 0; i < planets.size(); i++) {
+            world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass)*planets[i].scale, 16, 8);
+          }
+          // Get verticies and elements for all objects in world
+          d.vertexData(world.getVerticesSize(), world.getVertices());
+          d.elementData(world.getElementsSize(), world.getElements());
+
+          // Background Fill Color
+          glClearColor(0, 0, 0, 1.0f);
+          glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+          t += dt;
+
+          //d.set_matrix(t); View rotation
+          
+          // Shaders and textures to buffer
+          glDrawElements(GL_TRIANGLES, world.getElementsCount(), GL_UNSIGNED_INT, 0);
+
+          // Flip Buffers and Draw
+          glfwSwapBuffers(mWindow);
+          glfwPollEvents();
+
+          // Update time
+          t0 = t1;
         }
-
-        //d.set_matrix(t); View rotation
-        
-        // Shaders and textures to buffer
-        glDrawElements(GL_TRIANGLES, world.getElementsCount(), GL_UNSIGNED_INT, 0);
-
-        // Flip Buffers and Draw
-        glfwSwapBuffers(mWindow);
-        glfwPollEvents();
-
-        // Apply FPS delay
-        sleep_for(nanoseconds(nano_delay));
     }
     glfwTerminate();
     return EXIT_SUCCESS;
