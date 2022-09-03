@@ -32,6 +32,74 @@ using namespace std::chrono;
 // Images
 #include "stb_image.h"
 
+class vec3 {
+  public:
+    double x;
+    double y;
+    double z;
+    
+    vec3(double xx, double yy, double zz)
+      : x(xx), y(yy), z(zz) {}
+    
+    vec3 plus(vec3 v) {
+        return vec3(x+v.x, y+v.y, z+v.z);
+    }
+
+    vec3 sub(vec3 v) {
+        return vec3(x-v.x, y-v.y, z-v.z);
+    }
+
+    vec3 scale(double a) {
+        return vec3(a*x, a*y, a*z);
+    }
+
+    double abs() {
+        return sqrt(x*x + y*y + z*z);
+    }
+};
+
+std::ostream &operator<<(std::ostream &os, vec3 const &m) { 
+    return os << "(" << m.x << "," << m.y << "," << m.z << ")";
+}
+
+class planet {       
+    public:            
+        double mass;
+        double scale;
+        vec3 p;
+        vec3 v;
+        vec3 a;
+        vec3 a0;
+        planet(double mm, vec3 pp, vec3 vv, double ss = 1) 
+            : mass(mm), scale(ss), p(pp), v(vv), a(0.0, 0.0, 0.0), a0(0.0, 0.0, 0.0) {}
+    
+    void p_up(double dt) {
+        this->p = this->p.plus(this->v.scale(dt));
+    }
+
+    void v_up(double dt) {
+        this->v = this->v.plus(this->a.scale(dt));
+    }
+};
+
+class Vert {
+  public:
+    GLfloat x;
+    GLfloat y;
+    GLfloat z;
+    GLfloat r = 1.0;
+    GLfloat g = 1.0;
+    GLfloat b = 1.0;
+    GLfloat u;
+    GLfloat v;
+    
+    Vert(float xx, float yy, float zz, float uu, float vv)
+      : x(xx), y(yy), z(zz), u(uu), v(vv) {}
+      
+    Vert(vec3 pos, float uu, float vv)
+      : x(pos.x), y(pos.y), z(pos.z), u(uu), v(vv) {}
+};
+
 string read_file(const string filename) {
   ifstream f(filename);
   if (f) {
@@ -115,9 +183,9 @@ class D {
       glEnable(GL_DEPTH_TEST);
     }
     
-    void set_matrix(float t) {
-      glm::mat4 model = glm::mat4(1.0f);
-      model = glm::rotate(model, glm::radians(t), glm::vec3(0.0f, 0.0f, 1.0f));
+    void set_matrix(vec3 offset) {
+      glm::mat4 model = glm::translate(glm::mat4(1.0), glm::vec3(offset.x, offset.y, offset.z));
+
       GLint uniModel = glGetUniformLocation(shaderProgram, "model");
       glUniformMatrix4fv(uniModel, 1, GL_FALSE, glm::value_ptr(model));
       glm::mat4 view = glm::lookAt(
@@ -125,6 +193,7 @@ class D {
           glm::vec3(0.0f, 0.0f, 0.0f),
           glm::vec3(0.0f, 0.0f, 1.0f)
       );
+      
       GLint uniView = glGetUniformLocation(shaderProgram, "view");
       glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
     }
@@ -177,72 +246,8 @@ class D {
       uniColor = glGetUniformLocation(shaderProgram, "triangleColor");
       glUniform3f(uniColor, 0.5f, 0.0f, 1.0f);
       projection_matrix_setup(); // we only call this once
-      set_matrix(0.0); // this will be called many times in the future
+      set_matrix(vec3(0.0, 0.0, 0.0)); // this will be called many times in the future
     }
-};
-
-class vec3 {
-  public:
-    double x;
-    double y;
-    double z;
-    
-    vec3(double xx, double yy, double zz)
-      : x(xx), y(yy), z(zz) {}
-    
-    vec3 plus(vec3 v) {
-        return vec3(x+v.x, y+v.y, z+v.z);
-    }
-
-    vec3 sub(vec3 v) {
-        return vec3(x-v.x, y-v.y, z-v.z);
-    }
-
-    vec3 scale(double a) {
-        return vec3(a*x, a*y, a*z);
-    }
-
-    double abs() {
-        return sqrt(x*x + y*y + z*z);
-    }
-};
-
-class planet {       
-    public:            
-        double mass;
-        double scale;
-        vec3 p;
-        vec3 v;
-        vec3 a;
-        vec3 a0;
-        planet(double mm, vec3 pp, vec3 vv, double ss = 1) 
-            : mass(mm), scale(ss), p(pp), v(vv), a(0.0, 0.0, 0.0), a0(0.0, 0.0, 0.0) {}
-    
-    void p_up(double dt) {
-        this->p = this->p.plus(this->v.scale(dt));
-    }
-
-    void v_up(double dt) {
-        this->v = this->v.plus(this->a.scale(dt));
-    }
-};
-
-class Vert {
-  public:
-    GLfloat x;
-    GLfloat y;
-    GLfloat z;
-    GLfloat r = 1.0;
-    GLfloat g = 1.0;
-    GLfloat b = 1.0;
-    GLfloat u;
-    GLfloat v;
-    
-    Vert(float xx, float yy, float zz, float uu, float vv)
-      : x(xx), y(yy), z(zz), u(uu), v(vv) {}
-      
-    Vert(vec3 pos, float uu, float vv)
-      : x(pos.x), y(pos.y), z(pos.z), u(uu), v(vv) {}
 };
 
 class World {
@@ -366,52 +371,64 @@ void phys_up(double dt, double G, vector<planet> &planets) {
     }
 }
 
-double planet_rad(double mass, double dens = 5520) {
-    return cbrt((3 * mass) / (4 * M_PI * dens));
+vec3 mass_center(vector<planet> &planets) {
+  double total_mass = 0.0;
+  vec3 sum_p_mass = vec3(0.0, 0.0, 0.0);
+  for (int i = 0; i < planets.size(); i++) {
+    sum_p_mass = sum_p_mass.plus(planets[i].p.scale(planets[i].mass));
+    total_mass += planets[i].mass;
+  }
+  return sum_p_mass.scale(1/total_mass);
 }
 
+double planet_rad(double mass, double dens = 5520) {
+  return cbrt((3 * mass) / (4 * M_PI * dens));
+}
+
+double rand_dub(double max) {
+  return 2 * max * ((double)(rand()) / (double)(RAND_MAX)) - max;
+}
+
+
 void lagrange_system(vector<planet> &planets) {
-    const double rad_sep = 1;
-    const double v_scale = 5e-1;
-    
-    vector<vec3> p_init = {};
-    vector<vec3> v_init = {};
-    
-    for (int i = 0; i < 3; i++) {
-        double theta = 2 * i * M_PI / 3;
-        p_init.push_back(vec3(rad_sep * cos(theta), rad_sep * sin(theta), 0));
-        v_init.push_back(vec3(v_scale * rad_sep * sin(theta), -v_scale * rad_sep * cos(theta), 0));
-    }
+  const double rad_sep = 1;
+  const double v_scale = 5e-1;
+  
+  vector<vec3> p_init = {};
+  vector<vec3> v_init = {};
+  
+  for (int i = 0; i < 3; i++) {
+      double theta = 2 * i * M_PI / 3;
+      p_init.push_back(vec3(rad_sep * cos(theta), rad_sep * sin(theta), 0));
+      v_init.push_back(vec3(v_scale * rad_sep * sin(theta), -v_scale * rad_sep * cos(theta), 0));
+  }
 
-    planet sun_1(1, p_init[0], v_init[0]);
-    planet sun_2(1, p_init[1], v_init[1]);
-    planet sun_3(1, p_init[2], v_init[2]);
-    planet planet_1(1.0/1000, vec3(5e-1, -5e-1, 2e-1), vec3(0, 5e-1, 0), 5e0);
+  planet sun_1(1, p_init[0], v_init[0]);
+  planet sun_2(1, p_init[1], v_init[1]);
+  planet sun_3(1, p_init[2], v_init[2]);
+  planet planet_1(1.0/1000, vec3(5e-1, -5e-1, 2e-1), vec3(0, 5e-1, 0), 5e0);
 
-    planets.push_back(sun_1);
-    planets.push_back(sun_2);
-    planets.push_back(sun_3);
-    planets.push_back(planet_1);
+  planets.push_back(sun_1);
+  planets.push_back(sun_2);
+  planets.push_back(sun_3);
+  planets.push_back(planet_1);
 }
 
 void figure_eight(vector<planet>& planets) {
-    planet sun_1(1, vec3(-0.97000436, 0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
-    planet sun_2(1, vec3(0.97000436, -0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
-    planet sun_3(1, vec3(0, 0, 0), vec3(-2*0.466203685, -2*0.43236573, 0));
+  planet sun_1(1, vec3(-0.97000436, 0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+  planet sun_2(1, vec3(0.97000436, -0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
+  planet sun_3(1, vec3(0, 0, 0), vec3(-2*0.466203685, -2*0.43236573, 0));
 
-    planets.push_back(sun_1);
-    planets.push_back(sun_2);
-    planets.push_back(sun_3);
+  planets.push_back(sun_1);
+  planets.push_back(sun_2);
+  planets.push_back(sun_3);
 }
 
-void random(vector<planet>& planets) {
-    planet sun_1(1, vec3(-0.97000436, 0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
-    planet sun_2(1, vec3(0.97000436, -0.24308753, 0), vec3(0.466203685, 0.43236573, 0));
-    planet sun_3(1, vec3(0, 0, 0), vec3(-2 * 0.466203685, -2 * 0.43236573, 0));
-
-    planets.push_back(sun_1);
-    planets.push_back(sun_2);
-    planets.push_back(sun_3);
+void random(vector<planet>& planets, int bodies) {
+  for (int i = 0; i < bodies; i++) {
+    planet body(0.75 + rand_dub(0.25), vec3(rand_dub(1), rand_dub(1), rand_dub(1)), vec3(rand_dub(0.5), rand_dub(0.5), rand_dub(0.5)));
+    planets.push_back(body);
+  }
 }
 
 int main() {
@@ -439,6 +456,8 @@ int main() {
     D d;
     fprintf(stderr, "Loaded vertex data. Error code is: %d \n", glGetError());
     
+    srand((unsigned int)time(nullptr));
+
     // -------------------------------- //
     // PHYSICS CONSTANTS
     // -------------------------------- //
@@ -446,12 +465,18 @@ int main() {
     const double scale = 6e-1;          // Scale factor for visualization 
     
     // -------------------------------- //
+    // RENDER CONSTANTS
+    // -------------------------------- //
+    vec3 orgin_prev = vec3(0.0, 0.0, 0.0);   // For maintaining CG
+    vec3 orgin = vec3(0.0, 0.0, 0.0);        // For maintaining CG
+
+    // -------------------------------- //
     // TIME CONSTANTS
     // -------------------------------- //
     double t = 0.0;                     // Physics: Time in while loop [Units of time step]
     const double dt = 1e-4;             // Physics: Time step [s?]
-    const int phys_loop = 100;          // Physics: Physics updates per frame [#]
-    const double FPS = 120;             // Render: Frames per seccond [FPS]
+    const int phys_loop = 50;          // Physics: Physics updates per frame [#]
+    const double FPS = 60;             // Render: Frames per seccond [FPS]
     const double frame_delay = 1/FPS;   // Render: Frame time period [s]
     glfwSetTime(0.0);                   // Render: Set GLFW timer to zero
     double t0 = 0.0;                    // Render: Previous frame draw time [s]
@@ -459,7 +484,7 @@ int main() {
 
     // Define planet initial conditions and push to vector
     vector<planet> planets = {};
-    lagrange_system(planets);
+    random(planets, 5);
 
     // -------------------------------- //
     // WINDOW LOOP
@@ -498,7 +523,8 @@ int main() {
           glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
           t += dt;
 
-          //d.set_matrix(t); View rotation
+          // Adjust window to follow C.G.
+          d.set_matrix(mass_center(planets).scale(-scale));
           
           // Shaders and textures to buffer
           glDrawElements(GL_TRIANGLES, world.getElementsCount(), GL_UNSIGNED_INT, 0);
