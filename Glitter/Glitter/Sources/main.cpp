@@ -353,19 +353,19 @@ class World {
 
 void phys_up(double dt, double G, vector<planet> &planets) {
     // Position update: Vec3d new_pos = pos + vel * dt + acc * (dt * dt * 0.5);
-    for (int i = 0; i < planets.size(); i++) {
+    for (uint i = 0; i < planets.size(); i++) {
         planets[i].p = planets[i].p.plus(planets[i].v.scale(dt)).plus(planets[i].a.scale(dt * dt * 0.5));
         //planets[i].p = planets[i].p.plus(planets[i].v.plus(planets[i].a.scale(0.5 * dt)).scale(dt));
     }
     // Save previous acceleration
-    for (int i = 0; i < planets.size(); i++) {
+    for (uint i = 0; i < planets.size(); i++) {
       planets[i].a0 = planets[i].a;
       planets[i].a = vec3(0.0, 0.0, 0.0);
     }
     // Compute acceleration
-    for (int i = 0; i < planets.size(); i++) {
+    for (uint i = 0; i < planets.size(); i++) {
         planets[i].a0 = planets[i].a;
-        for (int j = 0; j < i; j++) {
+        for (uint j = 0; j < i; j++) {
             vec3 displacement = planets[i].p.sub(planets[j].p);
             double distance = displacement.abs();
             vec3 G_inverse_square_ij = displacement.scale(G / (distance * distance * distance));
@@ -374,7 +374,7 @@ void phys_up(double dt, double G, vector<planet> &planets) {
         }
     }
     // Velocity update: Vec3d new_vel = vel + (acc + new_acc) * (dt * 0.5);
-    for (int i = 0; i < planets.size(); i++) {
+    for (uint i = 0; i < planets.size(); i++) {
         planets[i].v = planets[i].v.plus((planets[i].a0.plus(planets[i].a)).scale(dt * 0.5));
     }
 }
@@ -382,7 +382,7 @@ void phys_up(double dt, double G, vector<planet> &planets) {
 vec3 mass_center(vector<planet> &planets) {
   double total_mass = 0.0;
   vec3 sum_p_mass = vec3(0.0, 0.0, 0.0);
-  for (int i = 0; i < planets.size(); i++) {
+  for (uint i = 0; i < planets.size(); i++) {
     sum_p_mass = sum_p_mass.plus(planets[i].p.scale(planets[i].mass));
     total_mass += planets[i].mass;
   }
@@ -519,7 +519,7 @@ int main() {
 
           // Create world object and add all geometry
           World world;
-          for (int i = 0; i < planets.size(); i++) {
+          for (uint i = 0; i < planets.size(); i++) {
             world.add_sphere(planets[i].p.scale(scale), scale*planet_rad(planets[i].mass)*planets[i].scale, 16, 8);
           }
           // Get verticies and elements for all objects in world
