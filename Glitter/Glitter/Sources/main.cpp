@@ -56,6 +56,10 @@ class vec3 {
     double abs() {
         return sqrt(x*x + y*y + z*z);
     }
+    
+    float dot(vec3 v) {
+      return x*v.x + y*v.y + z*v.z;
+    }
 };
 
 std::ostream &operator<<(std::ostream &os, vec3 const &m) { 
@@ -98,6 +102,9 @@ class Vert {
       
     Vert(vec3 pos, float uu, float vv)
       : x(pos.x), y(pos.y), z(pos.z), u(uu), v(vv) {}
+    
+    Vert(vec3 pos, float uu, float vv, float lighting)
+      : x(pos.x), y(pos.y), z(pos.z), u(uu), v(vv), r(lighting), g(lighting), b(lighting) {}
 };
 
 string read_file(const string filename) {
@@ -269,12 +276,12 @@ class World {
         elements.push_back(vertexLoc+3);
     }
     
-    void add_quad(vec3 a, vec3 b, vec3 c, vec3 d) {
+    void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, double lighting = 1.0) {
       int vertexLoc = vertices.size();
-      vertices.push_back(Vert(a, 3., 0.));
-      vertices.push_back(Vert(b, 3., 1.));
-      vertices.push_back(Vert(c, 4., 0.));
-      vertices.push_back(Vert(d, 4., 1.));
+      vertices.push_back(Vert(a, 3., 0., lighting));
+      vertices.push_back(Vert(b, 3., 1., lighting));
+      vertices.push_back(Vert(c, 4., 0., lighting));
+      vertices.push_back(Vert(d, 4., 1., lighting));
       elements.push_back(vertexLoc);
       elements.push_back(vertexLoc+1);
       elements.push_back(vertexLoc+2);
@@ -334,7 +341,8 @@ class World {
           vec3 b = center.plus(get_sphere_point(phi0, theta1).scale(r));
           vec3 c = center.plus(get_sphere_point(phi1, theta0).scale(r));
           vec3 d = center.plus(get_sphere_point(phi1, theta1).scale(r));
-          add_quad(a, b, c, d);
+          float lighting = (vec3(0.5, 0.5, 0.7).dot(get_sphere_point(phi0, theta0)) + 1.0) / 2;
+          add_quad(a, b, c, d, lighting);
         }
       }
     }
