@@ -32,6 +32,10 @@ using namespace std::chrono;
 // Images
 #include "stb_image.h"
 
+// Typedefs
+typedef unsigned int uint;
+
+
 class vec3 {
   public:
     double x;
